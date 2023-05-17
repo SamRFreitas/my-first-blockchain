@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"my-first-blockchain/src"
 	"net/http"
+	"strconv"
 )
 
 var blockchain = src.NewBlockchain()
@@ -23,6 +24,7 @@ func mineBlock(w http.ResponseWriter, req *http.Request) {
 	blockchain.Transactions = append(blockchain.Transactions, transaction)
 
 	newBlock := blockchain.CreateBlock(proof, previousHash)
+	blockchain.Transactions = nil
 	blockchain.Chain = append(blockchain.Chain, newBlock)
 
 	var data []byte
@@ -111,10 +113,13 @@ func addTransaction(w http.ResponseWriter, req *http.Request) {
 			}
 			w.WriteHeader(http.StatusBadRequest)
 		} else {
-			index, _ := blockchain.AddTransaction(transaction.Sender, transaction.Receiver, transaction.Amount)
+			index, transaction := blockchain.AddTransaction(transaction.Sender, transaction.Receiver, transaction.Amount)
+			blockchain.Transactions = append(blockchain.Transactions, transaction)
+
+			message := "This transaction will be added to Block " + strconv.Itoa(index)
 			r = response{
 				Status:  http.StatusOK,
-				Message: "This transaction will be added to Block " + string(index),
+				Message: message,
 			}
 			w.WriteHeader(http.StatusOK)
 		}
@@ -184,22 +189,24 @@ func replaceChain(w http.ResponseWriter, req *http.Request) {
 		Status  int         `json:"status"`
 		Message string      `json:"message"`
 		Chain   []src.Block `json:"actualChain"`
+		Length  int         `json:"length"`
 	}
+	var isChainReplaced bool
 
-	isChainReplaced := blockchain.ReplaceChain()
+	isChainReplaced, blockchain.Chain = blockchain.ReplaceChain()
 	var r response
 
 	if isChainReplaced {
 		r = response{
-			Status:  http.StatusOK,
 			Message: "The nodes had different chains so the chain was replaced by the longest one.",
 			Chain:   blockchain.Chain,
+			Length:  len(blockchain.Chain),
 		}
 	} else {
 		r = response{
-			Status:  http.StatusUnprocessableEntity,
 			Message: "All good. The chain is the largest one.",
 			Chain:   blockchain.Chain,
+			Length:  len(blockchain.Chain),
 		}
 	}
 
@@ -220,6 +227,6 @@ func main() {
 	http.HandleFunc("/connect-nodes", connectNodes)
 	http.HandleFunc("/replace-chain", replaceChain)
 
-	http.ListenAndServe(":8091", nil)
+	http.ListenAndServe(":8090", nil)
 
 }
